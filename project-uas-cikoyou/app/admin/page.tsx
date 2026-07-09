@@ -43,6 +43,7 @@ export default function AdminPage() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [authError, setAuthError] = useState('');
+  const [adminNotification, setAdminNotification] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   
   const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'users' | 'products'>('overview');
   
@@ -118,10 +119,56 @@ export default function AdminPage() {
   };
 
   const handleApprovePayment = (orderId: string) => {
-    const updatedOrders = ordersDatabase.map(o => o.id === orderId ? { ...o, status: 'Pesanan Masuk' as const } : o);
-    setOrdersDatabase(updatedOrders);
-    localStorage.setItem('cikoyou_orders', JSON.stringify(updatedOrders));
-  };
+  // 1. Cari data pesanan yang di-approve untuk mengambil nama customer & total harga
+  const targetOrder = ordersDatabase.find(o => o.id === orderId);
+
+  // 2. Update status pesanan seperti kode asli kamu
+  const updatedOrders = ordersDatabase.map(o => o.id === orderId ? { ...o, status: 'Pesanan Masuk' as const } : o) as typeof ordersDatabase;
+  setOrdersDatabase(updatedOrders);
+  localStorage.setItem('cikoyou_orders', JSON.stringify(updatedOrders));
+
+  // 3. JEMBATAN LOGIKA BARU: Otomatis tambah poin & update tier member
+  if (targetOrder) {
+    // Rumus: Setiap kelipatan Rp 1.000 dapat 1 Poin (contoh: Rp 50.000 = 50 poin)
+    const poinTambahan = Math.floor(targetOrder.totalPrice / 1000);
+
+    // Ambil data database member dari localStorage
+    const localUsers = JSON.parse(localStorage.getItem('cikoyou_database') || '[]');
+
+    // Update poin dan tier untuk user yang namanya cocok dengan pemesan
+    const updatedUsers = localUsers.map((user: any) => {
+      if (user.name === targetOrder.customerName) {
+        const poinBaru = (user.points || 0) + poinTambahan;
+
+        // Aturan naik tier otomatis berdasarkan akumulasi poin baru
+        let tierBaru = user.memberTier || '🥉 Bronze Member';
+        if (poinBaru >= 500) {
+          tierBaru = '👑 Gold Member';
+        } else if (poinBaru >= 200) {
+          tierBaru = '🥈 Silver Member';
+        } else {
+          tierBaru = '🥉 Bronze Member';
+        }
+
+        return { 
+          ...user, 
+          points: poinBaru, 
+          memberTier: tierBaru 
+        };
+      }
+      return user;
+    });
+
+    // Simpan kembali data member terbaru ke localStorage
+    localStorage.setItem('cikoyou_database', JSON.stringify(updatedUsers));
+
+    // Jika di file AdminPage kamu ada state untuk menampilkan tabel member (misal: setUsersDatabase),
+    // aktifkan baris di bawah ini dengan menghapus tanda garing (//) agar halaman admin langsung ter-refresh otomatis:
+    // setUsersDatabase(updatedUsers);
+
+    alert(`Pembayaran valid! ${targetOrder.customerName} berhasil mendapatkan +${poinTambahan} poin.`);
+  }
+};
 
   const handleCompleteOrder = (orderId: string) => {
     const updatedOrders = ordersDatabase.map(o => o.id === orderId ? { ...o, status: 'Selesai' as const } : o);
@@ -383,113 +430,178 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* TAB: PESANAN */}
-              {activeTab === 'orders' && (
-                <div className="space-y-4">
-                  {ordersDatabase.length === 0 ? (
-                    <div className="py-20 text-center text-gray-300 text-sm font-medium bg-black/20 rounded-3xl border border-white/5 border-dashed">
-                      Belum ada pesanan masuk.
-                    </div>
-                  ) : (
-                    ordersDatabase.map((order) => (
-                      <div key={order.id} className="bg-black/20 border border-white/10 p-6 rounded-3xl flex flex-col md:flex-row md:items-start justify-between gap-6 backdrop-blur-xl hover:bg-white/[0.04] transition-all">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h4 className="font-black text-[#ffeed8] text-xl">{order.customerName}</h4>
-                            <span className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg border flex items-center gap-1.5 ${
-                              order.status === 'Menunggu Pembayaran' ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' :
-                              order.status === 'Pesanan Masuk' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.2)]' :
-                              order.status === 'Selesai' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
-                              'bg-red-500/10 text-red-300 border-red-500/30'
-                            }`}>
-                              {order.status === 'Pesanan Masuk' && <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse"></span>}
-                              {order.status === 'Pesanan Masuk' ? 'Lunas - Siapkan' : order.status}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-gray-300 mb-4 font-medium">
-                            <span className="bg-white/10 px-2 py-0.5 rounded text-[9px]">ID: {order.id}</span>
-                            <span>•</span>
-                            <span>{order.date}</span>
-                          </div>
-                          <p className="text-sm text-[#ffeed8] bg-black/40 p-3 rounded-xl border border-white/5">{order.items}</p>
-                          
-                          {/* INFO METODE & BUKTI PEMBAYARAN */}
-                          <div className="mt-4 flex flex-wrap items-center gap-4 bg-white/5 p-3 rounded-xl border border-white/10">
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs font-bold text-gray-300 uppercase tracking-wider">Metode:</div>
-                              <div className="text-xs font-black text-[#be9c70] bg-[#801414]/30 px-3 py-1 rounded-lg border border-[#801414]/50">
-                                {order.paymentMethod || 'Belum Dipilih'}
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs font-bold text-gray-300 uppercase tracking-wider ml-2">Bukti:</div>
-                              {order.paymentProof ? (
-                                <div className="flex items-center gap-3">
-                                  {/* 📸 FOTO PRATINJAU MINI LANGSUNG DI BARIS ADMIN */}
-                                  <div 
-                                    onClick={() => setSelectedProofImage(order.paymentProof!)} 
-                                    className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/20 cursor-pointer hover:border-[#D4A373] transition-all group/thumb bg-black/40 shrink-0"
-                                    title="Klik untuk memperbesar gambar"
-                                  >
-                                    <img 
-                                      src={order.paymentProof} 
-                                      alt="Mini Bukti" 
-                                      className="w-full h-full object-cover group-hover/thumb:scale-110 transition-transform duration-300" 
-                                    />
-                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
-                                      <span className="text-[10px]">🔍</span>
-                                    </div>
-                                  </div>
-                                  <button 
-                                    onClick={() => setSelectedProofImage(order.paymentProof!)} 
-                                    className="text-xs font-black text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg border border-blue-500/30 transition-all flex items-center gap-1.5"
-                                  >
-                                    Perbesar
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-xs font-bold text-orange-400 bg-orange-500/10 px-3 py-1 rounded-lg border border-orange-500/30">Belum Upload</span>
-                              )}
-                            </div>
-                          </div>
+             {/* TAB: PESANAN */}
+{activeTab === 'orders' && (
+  <div className="space-y-4">
+    
+    {/* 🌟 BANNER NOTIFIKASI ELEGAN (MENGGANTIKAN ALERT BAWAN BROWSER) */}
+    {adminNotification && (
+      <div className={`p-4 rounded-2xl border mb-4 text-sm font-bold flex items-center justify-between animate-fade-in-down ${
+        adminNotification.type === 'success' 
+          ? 'bg-green-500/10 border-green-500/30 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.1)]' 
+          : 'bg-red-500/10 border-red-500/30 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.1)]'
+      }`}>
+        <div className="flex items-center gap-2">
+          <span>{adminNotification.type === 'success' ? '🎉' : '⚠️'}</span>
+          <span>{adminNotification.text}</span>
+        </div>
+        <button 
+          onClick={() => setAdminNotification(null)} 
+          className="text-xs opacity-50 hover:opacity-100 transition-opacity ml-4"
+        >
+          &times;
+        </button>
+      </div>
+    )}
 
-                          <p className="text-sm text-gray-200 font-black mt-4 text-lg">Total: Rp {order.totalPrice.toLocaleString('id-ID')}</p>
-                        </div>
-                        
-                        <div className="flex flex-col gap-2.5 min-w-[180px]">
-                          {order.status === 'Menunggu Pembayaran' && (
-                            <>
-                              <button onClick={() => handleApprovePayment(order.id)} className="w-full text-xs font-black bg-green-500/20 hover:bg-green-500 border border-green-500/50 text-green-300 hover:text-white px-4 py-3 rounded-xl transition-all active:scale-95">
-                                ✔️ Validasi Pembayaran
-                              </button>
-                              <button onClick={() => handleCancelOrderClick(order.id)} className="w-full text-[10px] font-bold bg-transparent hover:bg-orange-500/20 border border-orange-500/30 px-4 py-2 rounded-xl text-orange-400 transition-all active:scale-95">
-                                Batalkan Transaksi
-                              </button>
-                            </>
-                          )}
+    {ordersDatabase.length === 0 ? (
+      <div className="py-20 text-center text-gray-300 text-sm font-medium bg-black/20 rounded-3xl border border-white/5 border-dashed">
+        Belum ada pesanan masuk.
+      </div>
+    ) : (
+      ordersDatabase.map((order) => {
+        // 🔥 LOGIKA SINKRONISASI POIN OTOMATIS
+        const hitungDanTambahPoin = (orderData: any) => {
+          const hargaTotal = Number(orderData.totalPrice) || 0;
+          const poinDidapat = hargaTotal > 0 ? Math.floor(hargaTotal / 10000) : 0;
 
-                          {order.status === 'Pesanan Masuk' && (
-                            <>
-                              <button onClick={() => handleCompleteOrder(order.id)} className="w-full text-xs font-black bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all hover:-translate-y-1 active:scale-95">
-                                🚀 Selesaikan Pesanan
-                              </button>
-                              <button onClick={() => handleRejectOrderClick(order.id)} className="w-full text-[10px] font-bold bg-transparent hover:bg-red-900/60 border border-red-500/40 px-4 py-2 rounded-xl text-red-300 hover:text-white transition-all active:scale-95">
-                                🛑 Tolak Pesanan
-                              </button>
-                            </>
-                          )}
+          if (poinDidapat > 0) {
+            const localUsers = JSON.parse(localStorage.getItem('cikoyou_database') || '[]');
+            const updatedUsers = localUsers.map((user: any) => {
+              if (user.name && user.name.toLowerCase() === orderData.customerName.toLowerCase()) {
+                return { ...user, points: (user.points || 0) + poinDidapat };
+              }
+              return user;
+            });
+            localStorage.setItem('cikoyou_database', JSON.stringify(updatedUsers));
+            window.dispatchEvent(new Event('storage'));
+          }
+          
+          // ✨ SEKARANG MUNCUL DI HALAMAN LANGSUNG: Set notifikasi ke state halaman, bukan alert browser
+          setAdminNotification({
+            text: `Pembayaran valid! ${orderData.customerName} berhasil mendapatkan +${poinDidapat} poin.`,
+            type: 'success'
+          });
 
-                          <div className="w-full h-[1px] bg-white/5 my-1"></div>
-                          <button onClick={() => handleDeleteOrderClick(order.id)} className="w-full flex items-center justify-center gap-1.5 text-[10px] font-bold bg-transparent hover:bg-red-500/10 border border-white/5 hover:border-red-500/30 px-4 py-2 rounded-xl text-amber-200 hover:text-red-400 transition-all active:scale-95">
-                            🗑️ Hapus Riwayat
-                          </button>
+          // Otomatis menghilangkan banner notifikasi setelah 4 detik
+          setTimeout(() => {
+            setAdminNotification(null);
+          }, 4000);
+        };
+
+        return (
+          <div key={order.id} className="bg-black/20 border border-white/10 p-6 rounded-3xl flex flex-col md:flex-row md:items-start justify-between gap-6 backdrop-blur-xl hover:bg-white/[0.04] transition-all">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <h4 className="font-black text-[#ffeed8] text-xl">{order.customerName}</h4>
+                <span className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg border flex items-center gap-1.5 ${
+                  order.status === 'Menunggu Pembayaran' ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' :
+                  order.status === 'Pesanan Masuk' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.2)]' :
+                  order.status === 'Selesai' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
+                  'bg-red-500/10 text-red-300 border-red-500/30'
+                }`}>
+                  {order.status === 'Pesanan Masuk' && <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse"></span>}
+                  {order.status === 'Pesanan Masuk' ? 'Lunas - Siapkan' : order.status}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-300 mb-4 font-medium">
+                <span className="bg-white/10 px-2 py-0.5 rounded text-[9px]">ID: {order.id}</span>
+                <span>•</span>
+                <span>{order.date}</span>
+              </div>
+              <p className="text-sm text-[#ffeed8] bg-black/40 p-3 rounded-xl border border-white/5">{order.items}</p>
+              
+              {/* INFO METODE & BUKTI PEMBAYARAN */}
+              <div className="mt-4 flex flex-wrap items-center gap-4 bg-white/5 p-3 rounded-xl border border-white/10">
+                <div className="flex items-center gap-2">
+                  <div className="text-xs font-bold text-gray-300 uppercase tracking-wider">Metode:</div>
+                  <div className="text-xs font-black text-[#be9c70] bg-[#801414]/30 px-3 py-1 rounded-lg border border-[#801414]/50">
+                    {order.paymentMethod || 'Belum Dipilih'}
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className="text-xs font-bold text-gray-300 uppercase tracking-wider ml-2">Bukti:</div>
+                  {order.paymentProof ? (
+                    <div className="flex items-center gap-3">
+                      <div 
+                        onClick={() => setSelectedProofImage(order.paymentProof!)} 
+                        className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/20 cursor-pointer hover:border-[#D4A373] transition-all group/thumb bg-black/40 shrink-0"
+                        title="Klik untuk memperbesar gambar"
+                      >
+                        <img 
+                          src={order.paymentProof} 
+                          alt="Mini Bukti" 
+                          className="w-full h-full object-cover group-hover/thumb:scale-110 transition-transform duration-300" 
+                        />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                          <span className="text-[10px]">🔍</span>
                         </div>
                       </div>
-                    ))
+                      <button 
+                        onClick={() => setSelectedProofImage(order.paymentProof!)} 
+                        className="text-xs font-black text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg border border-blue-500/30 transition-all flex items-center gap-1.5"
+                      >
+                        Perbesar
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-bold text-orange-400 bg-orange-500/10 px-3 py-1 rounded-lg border border-orange-500/30">Belum Upload</span>
                   )}
                 </div>
+              </div>
+
+              <p className="text-sm text-gray-200 font-black mt-4 text-lg">
+                Total: Rp {(order.totalPrice || 0).toLocaleString('id-ID')}
+              </p>
+            </div>
+            
+            <div className="flex flex-col gap-2.5 min-w-[180px]">
+              {order.status === 'Menunggu Pembayaran' && (
+                <>
+                  <button 
+                    onClick={() => {
+                      hitungDanTambahPoin(order);
+                      handleApprovePayment(order.id);
+                    }} 
+                    className="w-full text-xs font-black bg-green-500/20 hover:bg-green-500 border border-green-500/50 text-green-300 hover:text-white px-4 py-3 rounded-xl transition-all active:scale-95"
+                  >
+                    ✔️ Validasi Pembayaran
+                  </button>
+                  <button onClick={() => handleCancelOrderClick(order.id)} className="w-full text-[10px] font-bold bg-transparent hover:bg-orange-500/20 border border-orange-500/30 px-4 py-2 rounded-xl text-orange-400 transition-all active:scale-95">
+                    Batalkan Transaksi
+                  </button>
+                </>
               )}
+
+              {order.status === 'Pesanan Masuk' && (
+                <>
+                  <button 
+                    onClick={() => {
+                      hitungDanTambahPoin(order);
+                      handleCompleteOrder(order.id);
+                    }} 
+                    className="w-full text-xs font-black bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all hover:-translate-y-1 active:scale-95"
+                  >
+                    🚀 Selesaikan Pesanan
+                  </button>
+                  <button onClick={() => handleRejectOrderClick(order.id)} className="w-full text-[10px] font-bold bg-transparent hover:bg-red-900/60 border border-red-500/40 px-4 py-2 rounded-xl text-red-300 hover:text-white transition-all active:scale-95">
+                    🛑 Tolak Pesanan
+                  </button>
+                </>
+              )}
+
+              <div className="w-full h-[1px] bg-white/5 my-1"></div>
+              <button onClick={() => handleDeleteOrderClick(order.id)} className="w-full flex items-center justify-center gap-1.5 text-[10px] font-bold bg-transparent hover:bg-red-500/10 border border-white/5 hover:border-red-500/30 px-4 py-2 rounded-xl text-amber-200 hover:text-red-400 transition-all active:scale-95">
+                🗑️ Hapus Riwayat
+              </button>
+            </div>
+          </div>
+        );
+      })
+    )}
+  </div>
+)}
 
               {/* TAB: DATA MEMBER */}
               {activeTab === 'users' && (

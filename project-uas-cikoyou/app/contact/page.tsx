@@ -61,7 +61,7 @@ export default function ContactPage() {
                 href="/account" 
                 className="bg-[#2C0707] hover:bg-[#4A0D0D] text-[#ffeed8] hover:text-white font-black text-xs sm:text-sm uppercase tracking-wider py-2.5 px-6 rounded-full border border-[#4A0D0D] shadow-lg transition-all active:scale-95 whitespace-nowrap hidden sm:block"
               >
-                Member Area
+                Login
               </Link>
             )}
           </div>
@@ -131,11 +131,11 @@ export default function ContactPage() {
             </a>
 
             {/* Alamat */}
-            <a href="https://maps.app.goo.gl/aj5iipakAYWya2Na7" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 p-4 rounded-2xl bg-[#1F0303]/60 border border-transparent hover:border-[#D4A373]/50 transition-all group shadow-sm">
+            <a href="https://www.google.com/maps/place/Rm.+Banjar+Indah/@-1.2350982,116.8214385,3a,75y,227.47h,79.2t/data=!3m7!1e1!3m5!1sEjo7Jo71eD7xz5LzC7B2PQ!2e0!6shttps:%2F%2Fstreetviewpixels-pa.googleapis.com%2Fv1%2Fthumbnail%3Fcb_client%3Dmaps_sv.tactile%26w%3D900%26h%3D600%26pitch%3D10.804486963113135%26panoid%3DEjo7Jo71eD7xz5LzC7B2PQ%26yaw%3D227.46837710545688!7i16384!8i8192!4m14!1m7!3m6!1s0x2df147c1b4658ebb:0xcb5f748c063ce666!2sLapangan+Foni+Balikpapan+Barat!8m2!3d-1.234003!4d116.8221009!16s%2Fg%2F11btt73lv3!3m5!1s0x2df147c1c6613fd7:0xe038a100276f5b75!8m2!3d-1.2336919!4d116.821526!16s%2Fg%2F11hz8ydclc!5m1!1e2?entry=ttu&g_ep=EgoyMDI2MDYyOS4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 p-4 rounded-2xl bg-[#1F0303]/60 border border-transparent hover:border-[#D4A373]/50 transition-all group shadow-sm">
               <div className="text-2xl bg-blue-500/10 p-2 rounded-xl border border-blue-500/20 group-hover:scale-110 transition-transform">🏠</div>
               <div>
                 <p className="text-[10px] text-stone- font-bold uppercase tracking-widest">Location</p>
-                <p className="text-sm font-bold text-white group-hover:text-[#e1bc97] transition-colors">Jl. Batu Butok rt 84 no 73</p>
+                <p className="text-sm font-bold text-white group-hover:text-[#e1bc97] transition-colors">Jl. Semoi RT 15 NO 41 Gang Papadaan, Kel. Margasari, Kec. Balikpapan Barat</p>
               </div>
             </a>
           </div>

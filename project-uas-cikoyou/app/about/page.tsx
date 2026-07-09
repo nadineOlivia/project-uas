@@ -12,29 +12,44 @@ interface Review {
   date: string;
 }
 
+// Data awal jika localStorage masih kosong
+const DEFAULT_REVIEWS: Review[] = [
+  { id: 1, name: 'Andi Wijaya', rating: 5, comment: 'Cireng kuahnya juara banget! Pedesnya pas dan nagih.', date: '23 Juni 2026' },
+  { id: 2, name: 'Siti Aisyah', rating: 5, comment: 'Varian isi keju lumer di mulut. Anak-anak saya suka sekali.', date: '21 Juni 2026' },
+  { id: 3, name: 'Budi Santoso', rating: 4, comment: 'Garing di luar, dalemnya empuk ga alot. Mantap pol.', date: '19 Juni 2026' }
+];
+
 export default function AboutPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Data State Ulasan Dinamis Pelanggan
-  const [reviews, setReviews] = useState<Review[]>([
-    { id: 1, name: 'Andi Wijaya', rating: 5, comment: 'Cireng kuahnya juara banget! Pedesnya pas dan nagih.', date: '23 Juni 2026' },
-    { id: 2, name: 'Siti Aisyah', rating: 5, comment: 'Varian isi keju lumer di mulut. Anak-anak saya suka sekali.', date: '21 Juni 2026' },
-    { id: 3, name: 'Budi Santoso', rating: 4, comment: 'Garing di luar, dalemnya empuk ga alot. Mantap pol.', date: '19 Juni 2026' }
-  ]);
+  // State Ulasan dimulai dari array kosong dulu, nanti diisi di useEffect
+  const [reviews, setReviews] = useState<Review[]>([]);
   
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState('');
 
-  // Sinkronisasi status login member dari localStorage
+  // Sinkronisasi status login dan data ulasan dari localStorage
   useEffect(() => {
+    // 1. Cek Session Login
     const session = localStorage.getItem('cikoyou_session');
     if (session) {
       const user = JSON.parse(session);
       setIsLoggedIn(true);
       setCurrentUser(user);
     }
+
+    // 2. Cek Data Ulasan Tersimpan
+    const savedReviews = localStorage.getItem('cikoyou_reviews');
+    if (savedReviews) {
+      setReviews(JSON.parse(savedReviews));
+    } else {
+      setReviews(DEFAULT_REVIEWS);
+      // Opsional: langsung simpan data default ke localstorage agar tersinkronisasi
+      localStorage.setItem('cikoyou_reviews', JSON.stringify(DEFAULT_REVIEWS));
+    }
+
     setIsLoaded(true);
   }, []);
 
@@ -42,15 +57,29 @@ export default function AboutPage() {
     e.preventDefault();
     if (!newComment.trim() || !currentUser) return;
 
+    // Membuat format tanggal otomatis hari ini (Format: "Tanggal Bulan Tahun" -> Contoh: 9 Juli 2026)
+    const today = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
     const newReview: Review = {
       id: Date.now(),
       name: currentUser.name,
       rating: newRating,
       comment: newComment,
-      date: 'Hari Ini'
+      date: today
     };
 
-    setReviews([newReview, ...reviews]);
+    // Gabungkan ulasan baru ke dalam list ulasan yang sudah ada
+    const updatedReviews = [newReview, ...reviews];
+    
+    // Simpan ke State dan LocalStorage agar permanen
+    setReviews(updatedReviews);
+    localStorage.setItem('cikoyou_reviews', JSON.stringify(updatedReviews));
+
+    // Reset Form Input
     setNewComment('');
     setNewRating(5);
   };
@@ -72,7 +101,7 @@ export default function AboutPage() {
       <div className="absolute top-[-5%] right-[-10%] w-[500px] h-[500px] bg-[#801414]/25 rounded-full blur-[130px] pointer-events-none mix-blend-screen" />
       <div className="absolute bottom-[20%] left-[-10%] w-[500px] h-[500px] bg-[#D4A373]/10 rounded-full blur-[150px] pointer-events-none" />
 
-      {/* HEADER FLOATING PILL (KONSISTEN DENGAN HALAMAN LAIN) */}
+      {/* HEADER FLOATING PILL */}
       <div className="fixed top-6 left-0 w-full z-50 flex justify-center px-4 pointer-events-none">
         <header className="pointer-events-auto bg-[#1F0303]/95 backdrop-blur-xl border border-[#4A0D0D] rounded-full p-2 flex items-center justify-between w-full max-w-5xl shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
           
@@ -115,7 +144,7 @@ export default function AboutPage() {
         </header>
       </div>
 
-      {/* MAIN CONTENT (Ditambah padding atas `pt-32` agar tidak tertutup header) */}
+      {/* MAIN CONTENT */}
       <main className="max-w-5xl mx-auto px-6 pt-32 pb-16 relative z-10">
         
         {/* ================= TAMPILAN ATAS: PROFIL BISNIS ================= */}

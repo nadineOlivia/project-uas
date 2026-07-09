@@ -72,7 +72,7 @@ export default function HomePage() {
           <div>
             {!isLoggedIn ? (
               <Link href="/account" className="px-5 py-2 bg-[#D4A373] text-[#1F0303] hover:bg-[#E5B283] font-bold text-xs uppercase tracking-wider rounded-full transition-all flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95">
-                <span>Masuk</span>
+                <span>Login</span>
                 <span className="bg-[#1F0303]/10 rounded-full w-4 h-4 flex items-center justify-center text-[8px]">➔</span>
               </Link>
             ) : (

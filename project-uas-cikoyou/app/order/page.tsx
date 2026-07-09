@@ -36,14 +36,39 @@ export default function OrderPage() {
   const [discountAmount, setDiscountAmount] = useState(0);
   const [voucherMessage, setVoucherMessage] = useState({ text: '', type: '' });
 
-  // --- STATE SESI MEMBER ---
+  // --- STATE SESI & POIN MEMBER ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userPoints, setUserPoints] = useState(0); // 🔥 BARU: Menyimpan jumlah poin akun yang sedang login
+  const [usePointsDiscount, setUsePointsDiscount] = useState(false); // 🔥 BARU: Status apakah member mau tukar poin
 
   // --- EFEK & INTERVAL ---
   useEffect(() => {
     const session = localStorage.getItem('cikoyou_session');
-    if (session) setIsLoggedIn(true);
-  }, []);
+    if (session) {
+      setIsLoggedIn(true);
+      try {
+        // Ambil nama dari data session
+        const parsedSession = JSON.parse(session);
+        const nameFromSession = parsedSession.name || parsedSession.username || session;
+        setCustomerName(nameFromSession);
+
+        // Cari jumlah poin terbaru user ini dari database utama
+        const dbUsers = JSON.parse(localStorage.getItem('cikoyou_database') || '[]');
+        const currentUser = dbUsers.find((u: any) => u.name === nameFromSession);
+        if (currentUser) {
+          setUserPoints(currentUser.points || 0);
+        }
+      } catch (e) {
+        // Fallback jika format session hanya string biasa
+        setCustomerName(session);
+        const dbUsers = JSON.parse(localStorage.getItem('cikoyou_database') || '[]');
+        const currentUser = dbUsers.find((u: any) => u.name === session);
+        if (currentUser) {
+          setUserPoints(currentUser.points || 0);
+        }
+      }
+    }
+  }, [currentView]); // Direfresh setiap kali berganti view halaman
 
   // Update status pesanan secara real-time jika ada perubahan dari sisi Admin
   useEffect(() => {
@@ -66,6 +91,9 @@ export default function OrderPage() {
   const handleLogout = () => {
     localStorage.removeItem('cikoyou_session');
     setIsLoggedIn(false);
+    setCustomerName('');
+    setUserPoints(0);
+    setUsePointsDiscount(false);
   };
 
   const handleAddToCart = (product: typeof PRODUCTS[0]) => {
@@ -86,11 +114,19 @@ export default function OrderPage() {
       setDiscountAmount(0);
       setVoucherCode('');
       setVoucherMessage({ text: '', type: '' });
+      setUsePointsDiscount(false);
     }
   };
 
+  // KUMPULAN HITUNGAN KALKULASI NOTA (TERMASUK POTONGAN POIN)
   const cartTotal = cart.reduce((total, item) => total + item.price * item.quantity, 0);
-  const finalTotal = Math.max(0, cartTotal - discountAmount);
+  const intermediateTotal = Math.max(0, cartTotal - discountAmount);
+  
+  // Simulasi nilai tukar poin: 1 Poin = Rp 100 potongan harga
+  const poinMaksimalYangBisaDipakai = Math.min(userPoints, Math.ceil(intermediateTotal / 100));
+  const finalPointsDiscount = usePointsDiscount ? poinMaksimalYangBisaDipakai * 100 : 0;
+  
+  const finalTotal = Math.max(0, intermediateTotal - finalPointsDiscount);
 
   const handleApplyVoucher = () => {
     const code = voucherCode.trim().toUpperCase();
@@ -142,6 +178,19 @@ export default function OrderPage() {
       return alert("Silakan unggah bukti pembayaran Anda terlebih dahulu!");
     }
     
+    // 🔥 LOGIKA BARU: Jika menukarkan poin, kurangi langsung poin di database user saat order dibuat
+    if (isLoggedIn && usePointsDiscount && poinMaksimalYangBisaDipakai > 0) {
+      const localUsers = JSON.parse(localStorage.getItem('cikoyou_database') || '[]');
+      const updatedUsers = localUsers.map((user: any) => {
+        if (user.name === customerName) {
+          return { ...user, points: Math.max(0, (user.points || 0) - poinMaksimalYangBisaDipakai) };
+        }
+        return user;
+      });
+      localStorage.setItem('cikoyou_database', JSON.stringify(updatedUsers));
+      setUserPoints(prev => Math.max(0, prev - poinMaksimalYangBisaDipakai));
+    }
+
     const newOrderId = `CKY-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     setOrderId(newOrderId);
 
@@ -155,8 +204,8 @@ export default function OrderPage() {
       items: itemsSummary,
       totalPrice: finalTotal,
       status: initialStatus, 
-      paymentMethod: paymentMethod,       // 🌟 TAMBAHKAN INI: Agar metode (cash/transfer/qris) ikut tersimpan!
-      paymentProof: receiptPreview || null, // Perbaikan dari langkah sebelumnya
+      paymentMethod: paymentMethod,       
+      paymentProof: receiptPreview || null, 
       date: new Date().toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     };
 
@@ -176,12 +225,13 @@ export default function OrderPage() {
   const handleBackToMenu = () => {
     setCart([]); 
     setPaymentMethod('');
-    setCustomerName('');
+    if (!isLoggedIn) setCustomerName('');
     setOrderStatus('');
     setVoucherCode('');
     setDiscountAmount(0);
     setVoucherMessage({ text: '', type: '' });
     setReceiptPreview('');
+    setUsePointsDiscount(false);
     setCurrentView('menu');
   };
 
@@ -297,6 +347,14 @@ export default function OrderPage() {
                   <span className="font-bold">- Rp {discountAmount.toLocaleString('id-ID')}</span>
                 </div>
               )}
+
+              {/* 🔥 TAMPILAN BARU: Potongan Poin di Nota */}
+              {usePointsDiscount && finalPointsDiscount > 0 && (
+                <div className="flex justify-between items-center mb-2 text-orange-300 text-sm font-medium">
+                  <span>Tukar Poin ({poinMaksimalYangBisaDipakai} Poin)</span>
+                  <span className="font-bold">- Rp {finalPointsDiscount.toLocaleString('id-ID')}</span>
+                </div>
+              )}
               
               <div className="flex justify-between items-center mt-4">
                 <span className="text-base font-bold text-gray-300">Total Tagihan</span>
@@ -304,7 +362,7 @@ export default function OrderPage() {
               </div>
             </div>
 
-            {/* INPUT NAMA PEMESAN */}
+            {/* INPUT NAMA PEMESAN (OTOMATIS DIKUNCI KALAU SUDAH LOGIN MEMBER) */}
             <div className="mb-6">
               <label className="block text-[10px] font-bold text-gray-200 uppercase tracking-widest mb-2">Nama Pemesan</label>
               <input 
@@ -312,13 +370,17 @@ export default function OrderPage() {
                 required 
                 value={customerName} 
                 onChange={(e) => setCustomerName(e.target.value)} 
-                className="w-full bg-[#1F0303]/60 border border-[#4A0D0D] focus:border-[#D4A373] px-4 py-3 rounded-xl text-gray-200 text-sm outline-none transition-all placeholder-stone-600" 
+                disabled={isLoggedIn} 
+                className={`w-full bg-[#1F0303]/60 border border-[#4A0D0D] focus:border-[#D4A373] px-4 py-3 rounded-xl text-gray-200 text-sm outline-none transition-all placeholder-stone-600 ${isLoggedIn ? 'opacity-60 cursor-not-allowed select-none' : ''}`} 
                 placeholder="Masukkan nama kamu di sini..." 
               />
+              {isLoggedIn && (
+                <p className="text-[10px] text-amber-200/70 mt-1.5">✨ Sesi member aktif. Nama dikunci otomatis agar riwayat poin tersinkronisasi.</p>
+              )}
             </div>
 
             {/* PANEL INPUT VOUCHER */}
-            <div className="mb-8 p-4 bg-[#1F0303]/50 rounded-2xl border border-dashed border-[#5C1414]">
+            <div className="mb-4 p-4 bg-[#1F0303]/50 rounded-2xl border border-dashed border-[#5C1414]">
               <label className="block text-[10px] font-bold text-[#ffeed8] uppercase tracking-widest mb-2">🎟️ Punya Kode Voucher?</label>
               <div className="flex gap-2">
                 <input 
@@ -342,11 +404,32 @@ export default function OrderPage() {
               )}
             </div>
 
+            {/* 🔥 PANEL BARU: FITUR TUKAR POIN MEMBER */}
+            {isLoggedIn && userPoints > 0 && (
+              <div className="mb-6 p-4 bg-[#801414]/10 rounded-2xl border border-[#4A0D0D] flex items-center justify-between shadow-inner">
+                <div>
+                  <p className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">🪙 Gunakan Poin Cikoyou</p>
+                  <p className="text-[11px] text-[#ffeed8]/80 mt-0.5">
+                    Miliki <span className="text-amber-300 font-bold">{userPoints} Poin</span> (1 Poin = Rp 100)
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={usePointsDiscount} 
+                    onChange={(e) => setUsePointsDiscount(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-stone-700/80 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+            )}
+
             {/* OPSI METODE PEMBAYARAN */}
             <h3 className="text-xs font-bold text-[#ffeed8] uppercase tracking-widest mb-4">Pilih Metode Pembayaran</h3>
             <div className="space-y-3 mb-8">
               <label className={`flex items-center gap-4 p-4 rounded-2xl border cursor-pointer transition-all ${paymentMethod === 'cash' ? 'bg-[#801414]/20 border-[#D4A373]' : 'bg-[#1F0303]/60 border-transparent hover:border-[#4A0D0D]'}`}>
-                <input type="radio" name="payment" value="cash" onChange={(e) => { setPaymentMethod(e.target.value); setReceiptPreview(''); }} className="w-4 h-4 accent-[#D4A373]" />
+                <input type="radio" name="payment" value="cash" checked={paymentMethod === 'cash'} onChange={(e) => { setPaymentMethod(e.target.value); setReceiptPreview(''); }} className="w-4 h-4 accent-[#D4A373]" />
                 <div className="text-xl">💵</div>
                 <div>
                   <p className="font-bold text-white text-sm">Cash (Bayar di Tempat)</p>
@@ -355,7 +438,7 @@ export default function OrderPage() {
               </label>
 
               <label className={`flex items-center gap-4 p-4 rounded-2xl border cursor-pointer transition-all ${paymentMethod === 'transfer' ? 'bg-[#801414]/20 border-[#D4A373]' : 'bg-[#1F0303]/60 border-transparent hover:border-[#4A0D0D]'}`}>
-                <input type="radio" name="payment" value="transfer" onChange={(e) => setPaymentMethod(e.target.value)} className="w-4 h-4 accent-[#D4A373]" />
+                <input type="radio" name="payment" value="transfer" checked={paymentMethod === 'transfer'} onChange={(e) => setPaymentMethod(e.target.value)} className="w-4 h-4 accent-[#D4A373]" />
                 <div className="text-xl">🏦</div>
                 <div>
                   <p className="font-bold text-white text-sm">Transfer Bank</p>
@@ -364,7 +447,7 @@ export default function OrderPage() {
               </label>
 
               <label className={`flex items-center gap-4 p-4 rounded-2xl border cursor-pointer transition-all ${paymentMethod === 'qris' ? 'bg-[#801414]/20 border-[#D4A373]' : 'bg-[#1F0303]/60 border-transparent hover:border-[#4A0D0D]'}`}>
-                <input type="radio" name="payment" value="qris" onChange={(e) => setPaymentMethod(e.target.value)} className="w-4 h-4 accent-[#D4A373]" />
+                <input type="radio" name="payment" value="qris" checked={paymentMethod === 'qris'} onChange={(e) => setPaymentMethod(e.target.value)} className="w-4 h-4 accent-[#D4A373]" />
                 <div className="text-xl">📱</div>
                 <div>
                   <p className="font-bold text-white text-sm">QRIS</p>
@@ -460,24 +543,24 @@ export default function OrderPage() {
             </div>
             
             <div className="flex justify-between items-center bg-black/20 p-4 rounded-xl border border-white/5 mb-4">
-  <span className="text-xs text-[#ffeed8] font-bold uppercase tracking-wider">Status Dapur</span>
-  <span className={`font-black text-xs uppercase px-3 py-1 rounded-md border ${
-    orderStatus === 'Selesai' ? 'text-green-400 bg-green-500/10 border-green-500/30' :
-    // Tetap mendeteksi semua kondisi pembatalan/penolakan dari admin
-    (orderStatus === 'Dibatalkan' || orderStatus === 'Ditolak' || orderStatus === 'Pesanan Ditolak') ? 'text-red-400 bg-red-500/10 border-red-500/30' :
-    orderStatus === 'Pesanan Masuk' ? 'text-yellow-200 bg-yellow-500/10 border-yellow-500/30 animate-pulse' :
-    'text-amber-300 bg-orange-500/10 border-orange-500/30 animate-pulse'
-  }`}>
-    {orderStatus === 'Selesai' 
-      ? 'Siap Diambil 🎉' 
-      : (orderStatus === 'Dibatalkan' || orderStatus === 'Ditolak' || orderStatus === 'Pesanan Ditolak') 
-        ? 'Dibatalkan ❌' // 🌟 Teks sudah diubah sesuai request kamu
-        : orderStatus === 'Menunggu Pembayaran' 
-          ? 'Menunggu Bayar ⏳' 
-          : 'Sedang Diproses 🍳'
-    }
-  </span>
-</div>
+              <span className="text-xs text-[#ffeed8] font-bold uppercase tracking-wider">Status Dapur</span>
+              <span className={`font-black text-xs uppercase px-3 py-1 rounded-md border ${
+                orderStatus === 'Selesai' ? 'text-green-400 bg-green-500/10 border-green-500/30' :
+                (orderStatus === 'Dibatalkan' || orderStatus === 'Ditolak' || orderStatus === 'Pesanan Ditolak') ? 'text-red-400 bg-red-500/10 border-red-500/30' :
+                orderStatus === 'Pesanan Masuk' ? 'text-yellow-200 bg-yellow-500/10 border-yellow-500/30 animate-pulse' :
+                'text-amber-300 bg-orange-500/10 border-orange-500/30 animate-pulse'
+              }`}>
+                {orderStatus === 'Selesai' 
+                  ? 'Siap Diambil 🎉' 
+                  : (orderStatus === 'Dibatalkan' || orderStatus === 'Ditolak' || orderStatus === 'Pesanan Ditolak') 
+                    ? 'Dibatalkan ❌' 
+                    : orderStatus === 'Menunggu Pembayaran' 
+                      ? 'Menunggu Bayar ⏳' 
+                      : 'Sedang Diproses 🍳'
+                }
+              </span>
+            </div>
+            
             {/* TAMPILAN BUKTI PEMBAYARAN DI NOTA STATUS */}
             {receiptPreview && (
               <div className="border-t border-[#4A0D0D] pt-4 mt-2">
